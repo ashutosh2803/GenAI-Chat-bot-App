@@ -1,71 +1,61 @@
-# 🤖 ChatBot Application
+# GenAI Chat-bot App
 
-This is a ChatBot application built using Generative AI. The application allows users to interact with an AI-powered chatbot that can understand and respond to natural language queries.
+A simple chat page: you send a message, a mock backend replies. No API key is required for this milestone.
 
-## ✨ Features
+## Prerequisites
 
-- 🧠 Natural language understanding
-- 🗣️ Context-aware responses
-- 🔌 Easy integration with various platforms
-- 🎨 Customizable responses and behavior
+- Node.js 18 or higher
+- npm (comes with Node.js)
 
-## 🛠️ Installation
+Check with:
 
-### Prerequisites
+```powershell
+node -v
+npm -v
+```
 
-- Node.js (v14 or higher)
-- npm (v6 or higher)
+## How to run
 
-### Frontend
+Use two terminals (PowerShell). Start the backend first.
 
-1. Navigate to the frontend directory:
-    ```sh
-    cd frontend
-    ```
+### 1. Backend (port 8000)
 
-2. Install the dependencies:
-    ```sh
-    npm install
-    ```
+```powershell
+cd backend
+npm install
+npm run dev
+```
 
-3. Start the development server:
-    ```sh
-    npm start
-    ```
+`npm run dev` uses **nodemon**, which restarts the server when you change backend files. That is the usual Node.js alternative to a Unix daemon while you develop.
 
-### Backend
+To run without auto-restart:
 
-1. Navigate to the backend directory:
-    ```sh
-    cd backend
-    ```
+```powershell
+npm start
+```
 
-2. Install the dependencies:
-    ```sh
-    npm install
-    ```
+Confirm it is up: open [http://localhost:8000/health](http://localhost:8000/health). You should see `{"status":"ok"}`.
 
-3. Start the server:
-    ```sh
-    npm start
-    ```
+### 2. Frontend (port 5173)
 
-## 🚀 Usage
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-Once both the frontend and backend servers are running, you can access the ChatBot application in your web browser at `http://localhost:3000`.
+Then open [http://localhost:5173](http://localhost:5173).
 
-## ⚙️ Configuration
+## How to try it
 
-You can customize the ChatBot's behavior by modifying the configuration files located in the `config` directory of both the frontend and backend.
+Type a message and press **Send** (or Enter). After a short pause you should get a reply like:
 
-## 🤝 Contributing
+`[mock] You said: hello`
 
-We welcome contributions! Please read our Contributing Guidelines for more information.
+If the backend is not running, the page shows an error bubble instead.
 
-## 📜 License
+## Roadmap (not built yet)
 
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## 📬 Contact
-
-If you have any questions or feedback, please feel free to reach out to us or raise an issue.
+- Real LLM (OpenAI, Gemini, or similar)
+- Saved conversations / history
+- Streaming replies

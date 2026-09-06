@@ -1,6 +1,6 @@
 # GenAI Chat-bot App
 
-A simple chat page: you send a message, a mock backend replies. No API key is required for this milestone.
+A simple chat page: you send a message, a mock backend replies. No API key is required for this milestone. The UI uses **Material UI**.
 
 ## Prerequisites
 

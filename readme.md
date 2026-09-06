@@ -18,7 +18,7 @@ npm -v
 
 Use two terminals (PowerShell). Start the backend first.
 
-### 1. Backend (port 8000)
+### 1. Backend (default port 8000)
 
 ```powershell
 cd backend
@@ -36,7 +36,9 @@ npm start
 
 Confirm it is up: open [http://localhost:8000/health](http://localhost:8000/health). You should see `{"status":"ok"}`.
 
-### 2. Frontend (port 5173)
+If 8000 is already in use, the server tries 8001, then 8002, and so on (up to 8020). Check the terminal for the URL it actually used. The chat page looks up `/health` on those ports, so it still finds the API.
+
+### 2. Frontend (default port 5173)
 
 ```powershell
 cd frontend
@@ -44,7 +46,7 @@ npm install
 npm run dev
 ```
 
-Then open [http://localhost:5173](http://localhost:5173).
+Then open [http://localhost:5173](http://localhost:5173). If 5173 is taken, Vite prints the next free port (5174, 5175, …) in the terminal. Use that URL instead.
 
 ## How to try it
 

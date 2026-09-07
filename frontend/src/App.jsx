@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   AppBar,
   Avatar,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Container,
@@ -18,6 +20,15 @@ import PersonIcon from "@mui/icons-material/Person";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { sendChatMessage } from "./api";
+import { useAuth } from "./auth/AuthContext";
+
+const GUEST_MESSAGE_LIMIT = 3;
+const GUEST_COUNT_KEY = "genai-guest-user-messages";
+
+function readGuestCount() {
+  const raw = Number(sessionStorage.getItem(GUEST_COUNT_KEY) || "0");
+  return Number.isFinite(raw) ? raw : 0;
+}
 
 function MessageRow({ role, text, typing = false }) {
   const isUser = role === "user";
@@ -74,10 +85,13 @@ function MessageRow({ role, text, typing = false }) {
 }
 
 function App() {
+  const { user, signOut } = useAuth();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [guestUserCount, setGuestUserCount] = useState(readGuestCount);
   const listRef = useRef(null);
+  const guestLimitReached = !user && guestUserCount >= GUEST_MESSAGE_LIMIT;
 
   useEffect(() => {
     listRef.current?.scrollTo({
@@ -89,7 +103,13 @@ function App() {
   async function handleSubmit(event) {
     event.preventDefault();
     const text = input.trim();
-    if (!text || isWaiting) return;
+    if (!text || isWaiting || guestLimitReached) return;
+
+    if (!user) {
+      const nextCount = guestUserCount + 1;
+      setGuestUserCount(nextCount);
+      sessionStorage.setItem(GUEST_COUNT_KEY, String(nextCount));
+    }
 
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text }]);
     setInput("");
@@ -127,6 +147,23 @@ function App() {
             </Typography>
           </Box>
           <Chip label="Mock" color="secondary" size="small" />
+          {user ? (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip label={user.email} size="small" variant="outlined" sx={{ color: "inherit", borderColor: "rgba(255,255,255,0.5)" }} />
+              <Button color="inherit" size="small" onClick={signOut}>
+                Log out
+              </Button>
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" component={RouterLink} to="/login">
+                Login
+              </Button>
+              <Button color="inherit" component={RouterLink} to="/register" variant="outlined">
+                Register
+              </Button>
+            </Stack>
+          )}
         </Toolbar>
       </AppBar>
 
@@ -141,6 +178,7 @@ function App() {
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
+            position: "relative",
           }}
         >
           <Box
@@ -170,6 +208,38 @@ function App() {
             )}
           </Box>
 
+          {guestLimitReached ? (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                bgcolor: "rgba(255, 255, 255, 0.82)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                p: 3,
+                zIndex: 1,
+              }}
+            >
+              <Paper elevation={4} sx={{ p: 3, maxWidth: 360, textAlign: "center" }}>
+                <Typography variant="h6" gutterBottom>
+                  Continue chatting
+                </Typography>
+                <Typography color="text.secondary" sx={{ mb: 2 }}>
+                  Guests can send {GUEST_MESSAGE_LIMIT} messages. Sign in or create an account to keep going.
+                </Typography>
+                <Stack direction="row" spacing={1} justifyContent="center">
+                  <Button component={RouterLink} to="/login" variant="contained">
+                    Login
+                  </Button>
+                  <Button component={RouterLink} to="/register" variant="outlined">
+                    Register
+                  </Button>
+                </Stack>
+              </Paper>
+            </Box>
+          ) : null}
+
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -184,7 +254,7 @@ function App() {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Type a message"
-                disabled={isWaiting}
+                disabled={isWaiting || guestLimitReached}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -195,7 +265,7 @@ function App() {
               <IconButton
                 type="submit"
                 color="primary"
-                disabled={isWaiting || !input.trim()}
+                disabled={isWaiting || guestLimitReached || !input.trim()}
                 aria-label="Send"
               >
                 <SendIcon />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
+  Alert,
   Box,
   Button,
   Divider,
@@ -11,6 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { registerAccount } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import GoogleSignInButton from "../auth/GoogleSignInButton";
 
@@ -22,12 +24,14 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [mismatch, setMismatch] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
-    if (!trimmedEmail || !password.trim()) return;
+    if (!trimmedEmail || !password) return;
 
     if (password !== confirmPassword) {
       setMismatch(true);
@@ -35,12 +39,21 @@ export default function RegisterPage() {
     }
 
     setMismatch(false);
-    signIn({
-      email: trimmedEmail,
-      name: trimmedName,
-      provider: "password",
-    });
-    navigate("/");
+    setPending(true);
+    setError("");
+    try {
+      const session = await registerAccount({
+        name: trimmedName,
+        email: trimmedEmail,
+        password,
+      });
+      signIn(session);
+      navigate("/");
+    } catch (err) {
+      setError(err.message || "Could not create the account");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -60,7 +73,7 @@ export default function RegisterPage() {
             <Typography variant="h5">Create account</Typography>
           </Stack>
           <Typography color="text.secondary" variant="body2">
-            Frontend capture only — nothing is sent to the backend yet.
+            Email sign-up and Google both create an account saved in the database.
           </Typography>
           <TextField
             label="Name"
@@ -98,11 +111,12 @@ export default function RegisterPage() {
             required
             fullWidth
           />
-          <Button type="submit" variant="contained" size="large">
-            Register
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          <Button type="submit" variant="contained" size="large" disabled={pending}>
+            {pending ? "Creating account…" : "Register"}
           </Button>
           <Divider>or</Divider>
-          <GoogleSignInButton />
+          <GoogleSignInButton label="Sign up with Google" />
           <Typography variant="body2" textAlign="center">
             Already have an account?{" "}
             <Link component={RouterLink} to="/login">

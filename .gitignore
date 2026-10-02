@@ -1,9 +1,9 @@
-.venv/
-__pycache__/
-*.py[cod]
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 credentials.json
+.venv/
+__pycache__/
+node_modules/

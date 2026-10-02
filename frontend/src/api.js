@@ -17,7 +17,7 @@ async function resolveApiBaseUrl() {
   }
 
   throw new Error(
-    "Could not reach the backend. Start it with npm run dev in the backend folder."
+    "Could not reach the backend. Start it with python run.py in the backend folder."
   );
 }
 
@@ -28,19 +28,55 @@ function getApiBaseUrl() {
   return apiBaseUrlPromise;
 }
 
-export async function sendChatMessage(message) {
+async function request(path, { method = "GET", body, token } = {}) {
   const apiUrl = await getApiBaseUrl();
-  const response = await fetch(`${apiUrl}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+  const response = await fetch(`${apiUrl}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   const data = await response.json().catch(() => ({}));
-
   if (!response.ok) {
-    throw new Error(data.error || "Failed to get a reply");
+    const error = new Error(data.error || "Request failed");
+    error.status = response.status;
+    throw error;
   }
+  return data;
+}
 
+export async function sendChatMessage(message) {
+  const data = await request("/api/chat", { method: "POST", body: { message } });
   return data.reply;
+}
+
+export function registerAccount({ name, email, password }) {
+  return request("/api/auth/register", { method: "POST", body: { name, email, password } });
+}
+
+export function loginAccount({ email, password }) {
+  return request("/api/auth/login", { method: "POST", body: { email, password } });
+}
+
+export function loginWithGoogle(credential) {
+  return request("/api/auth/google", { method: "POST", body: { credential } });
+}
+
+export function listConversations(token) {
+  return request("/api/conversations", { token });
+}
+
+export function getConversation(token, id) {
+  return request(`/api/conversations/${id}`, { token });
+}
+
+export function startConversation(token, message) {
+  return request("/api/conversations", { method: "POST", token, body: { message } });
+}
+
+export function appendConversationMessage(token, id, message) {
+  return request(`/api/conversations/${id}/messages`, { method: "POST", token, body: { message } });
 }

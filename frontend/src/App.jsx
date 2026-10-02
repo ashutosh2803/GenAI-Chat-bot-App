@@ -19,7 +19,7 @@ import {
 import PersonIcon from "@mui/icons-material/Person";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
-import { sendChatMessage } from "./api";
+import { sendChatMessage, listConversations, getConversation, startConversation, appendConversationMessage } from "./api";
 import { useAuth } from "./auth/AuthContext";
 
 const GUEST_MESSAGE_LIMIT = 3;
@@ -88,10 +88,47 @@ function App() {
   const { user, signOut } = useAuth();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState(null);
   const [isWaiting, setIsWaiting] = useState(false);
   const [guestUserCount, setGuestUserCount] = useState(readGuestCount);
   const listRef = useRef(null);
   const guestLimitReached = !user && guestUserCount >= GUEST_MESSAGE_LIMIT;
+
+  useEffect(() => {
+    if (!user?.token) {
+      setConversations([]);
+      setActiveConversationId(null);
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadHistory() {
+      try {
+        const { conversations: list } = await listConversations(user.token);
+        if (cancelled) return;
+        setConversations(list);
+        if (!list[0]) {
+          setActiveConversationId(null);
+          setMessages([]);
+          return;
+        }
+        const { conversation } = await getConversation(user.token, list[0].id);
+        if (cancelled) return;
+        setActiveConversationId(conversation.id);
+        setMessages(conversation.messages);
+      } catch (error) {
+        if (error.status === 401) signOut();
+      }
+    }
+
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, signOut]);
 
   useEffect(() => {
     listRef.current?.scrollTo({
@@ -116,12 +153,29 @@ function App() {
     setIsWaiting(true);
 
     try {
-      const reply = await sendChatMessage(text);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: reply },
-      ]);
+      if (user) {
+        const data = activeConversationId
+          ? await appendConversationMessage(user.token, activeConversationId, text)
+          : await startConversation(user.token, text);
+        setActiveConversationId(data.conversation.id);
+        setMessages(data.conversation.messages);
+        setConversations((prev) => [
+          {
+            id: data.conversation.id,
+            title: data.conversation.title,
+            updatedAt: data.conversation.updatedAt,
+          },
+          ...prev.filter((item) => item.id !== data.conversation.id),
+        ]);
+      } else {
+        const reply = await sendChatMessage(text);
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "assistant", text: reply },
+        ]);
+      }
     } catch (error) {
+      if (error.status === 401) signOut();
       setMessages((prev) => [
         ...prev,
         {
@@ -168,9 +222,61 @@ function App() {
       </AppBar>
 
       <Container
-        maxWidth="md"
-        sx={{ flex: 1, py: 2, display: "flex", minHeight: 0 }}
+        maxWidth="lg"
+        sx={{ flex: 1, py: 2, display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2, minHeight: 0 }}
       >
+        {user ? (
+          <Paper
+            elevation={2}
+            sx={{
+              width: { xs: "100%", md: 240 },
+              maxHeight: { xs: 160, md: "none" },
+              overflowY: "auto",
+              p: 1.5,
+              flexShrink: 0,
+            }}
+          >
+            <Button
+              fullWidth
+              variant="contained"
+              sx={{ mb: 1 }}
+              onClick={() => {
+                setActiveConversationId(null);
+                setMessages([]);
+              }}
+            >
+              New chat
+            </Button>
+            <Stack spacing={0.5}>
+              {conversations.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Saved chats show up here.
+                </Typography>
+              ) : (
+                conversations.map((conversation) => (
+                  <Button
+                    key={conversation.id}
+                    fullWidth
+                    size="small"
+                    variant={conversation.id === activeConversationId ? "contained" : "text"}
+                    sx={{ justifyContent: "flex-start", textTransform: "none" }}
+                    onClick={async () => {
+                      try {
+                        const { conversation: loaded } = await getConversation(user.token, conversation.id);
+                        setActiveConversationId(loaded.id);
+                        setMessages(loaded.messages);
+                      } catch (error) {
+                        if (error.status === 401) signOut();
+                      }
+                    }}
+                  >
+                    {conversation.title}
+                  </Button>
+                ))
+              )}
+            </Stack>
+          </Paper>
+        ) : null}
         <Paper
           elevation={2}
           sx={{

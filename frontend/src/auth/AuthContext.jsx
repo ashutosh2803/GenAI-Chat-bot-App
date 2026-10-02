@@ -9,7 +9,7 @@ function readStoredUser() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed?.email) return null;
+    if (!parsed?.email || !parsed?.token) return null;
     return parsed;
   } catch {
     return null;
@@ -20,14 +20,16 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
 
   const value = useMemo(() => {
-    function signIn(nextUser) {
-      const session = {
-        email: nextUser.email,
-        name: nextUser.name || "",
-        provider: nextUser.provider || "password",
+    function signIn(session) {
+      const nextUser = {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name || "",
+        provider: session.user.provider,
+        token: session.token,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-      setUser(session);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
+      setUser(nextUser);
     }
 
     function signOut() {

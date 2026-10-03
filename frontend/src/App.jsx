@@ -9,6 +9,11 @@ import {
   Chip,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   Paper,
   Stack,
@@ -16,10 +21,18 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
+import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 import PersonIcon from "@mui/icons-material/Person";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
-import { sendChatMessage, listConversations, getConversation, startConversation, appendConversationMessage } from "./api";
+import {
+  sendChatMessage,
+  listConversations,
+  getConversation,
+  startConversation,
+  appendConversationMessage,
+  deleteConversation,
+} from "./api";
 import { useAuth } from "./auth/AuthContext";
 import {
   composerShortcutHint,
@@ -38,57 +51,124 @@ function readGuestCount() {
   return Number.isFinite(raw) ? raw : 0;
 }
 
-function MessageRow({ role, text, typing = false }) {
+function formatLastConversationTime(iso) {
+  if (!iso) return "No messages yet";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "No messages yet";
+  const when = date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Last message ${when}`;
+}
+
+function formatMessageTime(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, typing = false }) {
   const isUser = role === "user";
   const isError = role === "error";
+  const timeLabel = typing ? "" : formatMessageTime(createdAt);
+  const timeVisible = showTime && Boolean(timeLabel);
 
   return (
-    <Stack
-      direction="row"
-      spacing={1.5}
-      justifyContent={isUser ? "flex-end" : "flex-start"}
-      alignItems="flex-end"
+    <Box
+      sx={{
+        display: "flex",
+        width: "100%",
+        justifyContent: isUser ? "flex-end" : "flex-start",
+      }}
     >
-      {!isUser ? (
-        <Avatar sx={{ bgcolor: isError ? "error.main" : "secondary.main" }}>
-          <SmartToyIcon />
-        </Avatar>
-      ) : null}
+      <Stack
+        spacing={0}
+        sx={{
+          maxWidth: "75%",
+          minWidth: 0,
+          alignItems: isUser ? "flex-end" : "flex-start",
+        }}
+      >
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "flex-end" }}>
+          {!isUser ? (
+            <Avatar
+              src="/icons8-brain-64.png"
+              alt=""
+              sx={{
+                bgcolor: "#fff",
+                width: 36,
+                height: 36,
+                "& img": { objectFit: "contain", p: "4px" },
+              }}
+            />
+          ) : null}
 
-      {isError ? (
-        <Alert severity="error" sx={{ maxWidth: "75%" }}>
-          {text}
-        </Alert>
-      ) : (
-        <Paper
-          elevation={0}
+          {isError ? (
+            <Alert
+              severity="error"
+              onClick={onRevealTimes}
+              sx={{ cursor: "pointer", maxWidth: "100%" }}
+            >
+              {text}
+            </Alert>
+          ) : (
+            <Paper
+              elevation={0}
+              onClick={typing ? undefined : onRevealTimes}
+              sx={{
+                px: 2,
+                py: 1.25,
+                maxWidth: "100%",
+                cursor: typing ? "default" : "pointer",
+                bgcolor: isUser ? "primary.main" : "grey.100",
+                color: isUser ? "primary.contrastText" : "text.primary",
+              }}
+            >
+              {typing ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <CircularProgress size={16} />
+                  <Typography variant="body2">Assistant is typing…</Typography>
+                </Stack>
+              ) : (
+                <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
+                  {text}
+                </Typography>
+              )}
+            </Paper>
+          )}
+
+          {isUser ? (
+            <Avatar sx={{ bgcolor: "primary.main" }}>
+              <PersonIcon />
+            </Avatar>
+          ) : null}
+        </Stack>
+
+        <Box
           sx={{
-            px: 2,
-            py: 1.25,
-            maxWidth: "75%",
-            bgcolor: isUser ? "primary.main" : "grey.100",
-            color: isUser ? "primary.contrastText" : "text.primary",
+            display: "grid",
+            gridTemplateRows: timeVisible ? "1fr" : "0fr",
+            opacity: timeVisible ? 1 : 0,
+            transition: "grid-template-rows 0.35s ease, opacity 0.35s ease",
+            width: "100%",
           }}
         >
-          {typing ? (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <CircularProgress size={16} />
-              <Typography variant="body2">Assistant is typing…</Typography>
-            </Stack>
-          ) : (
-            <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-              {text}
+          <Box sx={{ overflow: "hidden" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: "block", pt: 0.5, lineHeight: 1.2 }}
+            >
+              {timeLabel || "\u00a0"}
             </Typography>
-          )}
-        </Paper>
-      )}
-
-      {isUser ? (
-        <Avatar sx={{ bgcolor: "primary.main" }}>
-          <PersonIcon />
-        </Avatar>
-      ) : null}
-    </Stack>
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -100,9 +180,13 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showMessageTimes, setShowMessageTimes] = useState(false);
   const [guestUserCount, setGuestUserCount] = useState(readGuestCount);
   const listRef = useRef(null);
   const inputRef = useRef(null);
+  const messageTimesTimerRef = useRef(null);
   const guestLimitReached = !user && guestUserCount >= GUEST_MESSAGE_LIMIT;
 
   useEffect(() => {
@@ -147,6 +231,19 @@ function App() {
     });
   }, [messages, isWaiting]);
 
+  function revealMessageTimes() {
+    setShowMessageTimes(true);
+    if (messageTimesTimerRef.current) clearTimeout(messageTimesTimerRef.current);
+    messageTimesTimerRef.current = setTimeout(() => setShowMessageTimes(false), 5000);
+  }
+
+  useEffect(() => {
+    setShowMessageTimes(false);
+    if (messageTimesTimerRef.current) clearTimeout(messageTimesTimerRef.current);
+  }, [activeConversationId]);
+
+  useEffect(() => () => clearTimeout(messageTimesTimerRef.current), []);
+
   function startNewChat() {
     setActiveConversationId(null);
     setMessages([]);
@@ -162,6 +259,38 @@ function App() {
       setMessages(loaded.messages);
     } catch (error) {
       if (error.status === 401) signOut();
+    }
+  }
+
+  async function confirmDeleteConversation() {
+    if (!user?.token || !pendingDelete || isDeleting) return;
+    const removedId = pendingDelete.id;
+    setIsDeleting(true);
+    try {
+      await deleteConversation(user.token, removedId);
+      const remaining = conversations.filter((item) => item.id !== removedId);
+      setConversations(remaining);
+      setPendingDelete(null);
+      if (activeConversationId === removedId) {
+        if (remaining[0]) {
+          await openConversation(remaining[0].id);
+        } else {
+          startNewChat();
+        }
+      }
+    } catch (error) {
+      if (error.status === 401) signOut();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "error",
+          text: error.message || "Could not delete that conversation.",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -232,7 +361,10 @@ function App() {
       sessionStorage.setItem(GUEST_COUNT_KEY, String(nextCount));
     }
 
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), role: "user", text, createdAt: new Date().toISOString() },
+    ]);
     setInput("");
     setIsWaiting(true);
 
@@ -255,7 +387,7 @@ function App() {
         const reply = await sendChatMessage(text);
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "assistant", text: reply },
+          { id: crypto.randomUUID(), role: "assistant", text: reply, createdAt: new Date().toISOString() },
         ]);
       }
     } catch (error) {
@@ -266,6 +398,7 @@ function App() {
           id: crypto.randomUUID(),
           role: "error",
           text: error.message || "Something went wrong. Is the backend running?",
+          createdAt: new Date().toISOString(),
         },
       ]);
     } finally {
@@ -313,8 +446,8 @@ function App() {
           <Paper
             elevation={2}
             sx={{
-              width: { xs: "100%", md: 240 },
-              maxHeight: { xs: 160, md: "none" },
+              width: { xs: "100%", md: 280 },
+              maxHeight: { xs: 220, md: "none" },
               overflowY: "auto",
               p: 1.5,
               flexShrink: 0,
@@ -329,24 +462,71 @@ function App() {
             >
               New chat
             </Button>
-            <Stack spacing={0.5}>
+            <Stack spacing={0.25}>
               {conversations.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   Saved chats show up here.
                 </Typography>
               ) : (
-                conversations.map((conversation) => (
-                  <Button
-                    key={conversation.id}
-                    fullWidth
-                    size="small"
-                    variant={conversation.id === activeConversationId ? "contained" : "text"}
-                    sx={{ justifyContent: "flex-start", textTransform: "none" }}
-                    onClick={() => openConversation(conversation.id)}
-                  >
-                    {conversation.title}
-                  </Button>
-                ))
+                conversations.map((conversation) => {
+                  const selected = conversation.id === activeConversationId;
+                  const lastMessage = formatLastConversationTime(conversation.updatedAt);
+                  return (
+                    <Button
+                      key={conversation.id}
+                      fullWidth
+                      size="small"
+                      variant={selected ? "contained" : "text"}
+                      sx={{
+                        justifyContent: "flex-start",
+                        textTransform: "none",
+                        minWidth: 0,
+                        minHeight: 0,
+                        alignItems: "center",
+                        gap: 0.25,
+                        py: 0.25,
+                        pl: 1,
+                        pr: 0.25,
+                        borderRadius: 1,
+                      }}
+                      onClick={() => openConversation(conversation.id)}
+                    >
+                      <Box sx={{ minWidth: 0, flex: 1, textAlign: "left" }}>
+                        <Typography variant="body2" noWrap sx={{ lineHeight: 1.2 }}>
+                          {conversation.title}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{ display: "block", lineHeight: 1.2, opacity: selected ? 0.9 : 0.7 }}
+                        >
+                          {lastMessage}
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        component="span"
+                        size="small"
+                        aria-label={`Delete ${conversation.title}`}
+                        title="Delete conversation"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPendingDelete(conversation);
+                        }}
+                        sx={{
+                          color: "error.main",
+                          flexShrink: 0,
+                          alignSelf: "center",
+                          width: 24,
+                          height: 24,
+                          "&:hover": {
+                            bgcolor: selected ? "rgba(211, 47, 47, 0.18)" : "rgba(211, 47, 47, 0.08)",
+                          },
+                        }}
+                      >
+                        <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Button>
+                  );
+                })
               )}
             </Stack>
           </Paper>
@@ -381,7 +561,14 @@ function App() {
             ) : (
               <Stack spacing={2}>
                 {messages.map((message) => (
-                  <MessageRow key={message.id} role={message.role} text={message.text} />
+                  <MessageRow
+                    key={message.id}
+                    role={message.role}
+                    text={message.text}
+                    createdAt={message.createdAt}
+                    showTime={showMessageTimes}
+                    onRevealTimes={revealMessageTimes}
+                  />
                 ))}
                 {isWaiting ? <MessageRow role="assistant" typing /> : null}
               </Stack>
@@ -476,6 +663,30 @@ function App() {
           </Box>
         </Paper>
       </Container>
+
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onClose={() => {
+          if (!isDeleting) setPendingDelete(null);
+        }}
+      >
+        <DialogTitle>Delete this conversation?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {pendingDelete
+              ? `“${pendingDelete.title}” will be permanently deleted. ${formatLastConversationTime(pendingDelete.updatedAt)}. This cannot be undone.`
+              : ""}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingDelete(null)} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button color="error" variant="contained" onClick={confirmDeleteConversation} disabled={isDeleting}>
+            {isDeleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

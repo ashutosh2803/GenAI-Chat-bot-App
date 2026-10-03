@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -15,6 +15,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { loginAccount } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import GoogleSignInButton from "../auth/GoogleSignInButton";
+import { isAltLetter, isClearShortcut } from "../keyboard";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -23,6 +24,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (isClearShortcut(event)) {
+        event.preventDefault();
+        navigate("/");
+        return;
+      }
+      if (isAltLetter(event, "r")) {
+        event.preventDefault();
+        navigate("/register");
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -65,6 +83,7 @@ export default function LoginPage() {
             label="Email"
             type="email"
             autoComplete="email"
+            autoFocus
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
@@ -80,7 +99,7 @@ export default function LoginPage() {
             fullWidth
           />
           {error ? <Alert severity="error">{error}</Alert> : null}
-          <Button type="submit" variant="contained" size="large" disabled={pending}>
+          <Button type="submit" variant="contained" size="large" disabled={pending} aria-keyshortcuts="Enter">
             {pending ? "Signing in…" : "Sign in"}
           </Button>
           <Divider>or</Divider>
@@ -94,6 +113,9 @@ export default function LoginPage() {
           <Link component={RouterLink} to="/" variant="body2" textAlign="center">
             Back to chat
           </Link>
+          <Typography variant="caption" color="text.secondary" textAlign="center">
+            Enter sign in · Esc back to chat · Alt+R register
+          </Typography>
         </Stack>
       </Paper>
     </Box>

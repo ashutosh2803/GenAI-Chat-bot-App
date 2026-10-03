@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Alert,
   AppBar,
@@ -21,6 +21,14 @@ import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { sendChatMessage, listConversations, getConversation, startConversation, appendConversationMessage } from "./api";
 import { useAuth } from "./auth/AuthContext";
+import {
+  composerShortcutHint,
+  isAltLetter,
+  isClearShortcut,
+  isFocusComposerShortcut,
+  isRecallShortcut,
+  isSendShortcut,
+} from "./keyboard";
 
 const GUEST_MESSAGE_LIMIT = 3;
 const GUEST_COUNT_KEY = "genai-guest-user-messages";
@@ -86,6 +94,7 @@ function MessageRow({ role, text, typing = false }) {
 
 function App() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -93,6 +102,7 @@ function App() {
   const [isWaiting, setIsWaiting] = useState(false);
   const [guestUserCount, setGuestUserCount] = useState(readGuestCount);
   const listRef = useRef(null);
+  const inputRef = useRef(null);
   const guestLimitReached = !user && guestUserCount >= GUEST_MESSAGE_LIMIT;
 
   useEffect(() => {
@@ -136,6 +146,80 @@ function App() {
       behavior: "smooth",
     });
   }, [messages, isWaiting]);
+
+  function startNewChat() {
+    setActiveConversationId(null);
+    setMessages([]);
+    setInput("");
+    inputRef.current?.focus();
+  }
+
+  async function openConversation(conversationId) {
+    if (!user?.token) return;
+    try {
+      const { conversation: loaded } = await getConversation(user.token, conversationId);
+      setActiveConversationId(loaded.id);
+      setMessages(loaded.messages);
+    } catch (error) {
+      if (error.status === 401) signOut();
+    }
+  }
+
+  function switchConversation(delta) {
+    if (!user || conversations.length === 0) return;
+    const index = conversations.findIndex((item) => item.id === activeConversationId);
+    const nextIndex =
+      index === -1
+        ? delta > 0
+          ? 0
+          : conversations.length - 1
+        : (index + delta + conversations.length) % conversations.length;
+    const next = conversations[nextIndex];
+    if (next) openConversation(next.id);
+  }
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.isComposing) return;
+
+      if (isFocusComposerShortcut(event)) {
+        event.preventDefault();
+        inputRef.current?.focus();
+        return;
+      }
+
+      if (isAltLetter(event, "n") && user) {
+        event.preventDefault();
+        startNewChat();
+        return;
+      }
+
+      if (isAltLetter(event, "l") && !user) {
+        event.preventDefault();
+        navigate("/login");
+        return;
+      }
+
+      if (isAltLetter(event, "r") && !user) {
+        event.preventDefault();
+        navigate("/register");
+        return;
+      }
+
+      if (user && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          switchConversation(1);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          switchConversation(-1);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -240,10 +324,8 @@ function App() {
               fullWidth
               variant="contained"
               sx={{ mb: 1 }}
-              onClick={() => {
-                setActiveConversationId(null);
-                setMessages([]);
-              }}
+              title="New chat (Alt+N)"
+              onClick={startNewChat}
             >
               New chat
             </Button>
@@ -260,15 +342,7 @@ function App() {
                     size="small"
                     variant={conversation.id === activeConversationId ? "contained" : "text"}
                     sx={{ justifyContent: "flex-start", textTransform: "none" }}
-                    onClick={async () => {
-                      try {
-                        const { conversation: loaded } = await getConversation(user.token, conversation.id);
-                        setActiveConversationId(loaded.id);
-                        setMessages(loaded.messages);
-                      } catch (error) {
-                        if (error.status === 401) signOut();
-                      }
-                    }}
+                    onClick={() => openConversation(conversation.id)}
                   >
                     {conversation.title}
                   </Button>
@@ -357,14 +431,31 @@ function App() {
                 multiline
                 maxRows={4}
                 size="small"
+                inputRef={inputRef}
+                autoFocus
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Type a message"
                 disabled={isWaiting || guestLimitReached}
+                slotProps={{
+                  htmlInput: { "aria-keyshortcuts": "Enter" },
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (isSendShortcut(event)) {
                     event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
+                    event.currentTarget.closest("form")?.requestSubmit();
+                    return;
+                  }
+                  if (isClearShortcut(event) && input) {
+                    event.preventDefault();
+                    setInput("");
+                    return;
+                  }
+                  if (isRecallShortcut(event) && !input) {
+                    const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
+                    if (!lastUserMessage) return;
+                    event.preventDefault();
+                    setInput(lastUserMessage.text);
                   }
                 }}
               />
@@ -373,10 +464,15 @@ function App() {
                 color="primary"
                 disabled={isWaiting || guestLimitReached || !input.trim()}
                 aria-label="Send"
+                aria-keyshortcuts="Enter"
+                title="Send (Enter)"
               >
                 <SendIcon />
               </IconButton>
             </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+              {composerShortcutHint(Boolean(user))}
+            </Typography>
           </Box>
         </Paper>
       </Container>

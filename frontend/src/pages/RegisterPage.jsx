@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -15,6 +15,7 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { registerAccount } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import GoogleSignInButton from "../auth/GoogleSignInButton";
+import { isAltLetter, isClearShortcut } from "../keyboard";
 
 export default function RegisterPage() {
   const { signIn } = useAuth();
@@ -26,6 +27,23 @@ export default function RegisterPage() {
   const [mismatch, setMismatch] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (isClearShortcut(event)) {
+        event.preventDefault();
+        navigate("/");
+        return;
+      }
+      if (isAltLetter(event, "l")) {
+        event.preventDefault();
+        navigate("/login");
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -78,6 +96,7 @@ export default function RegisterPage() {
           <TextField
             label="Name"
             autoComplete="name"
+            autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             fullWidth
@@ -112,7 +131,7 @@ export default function RegisterPage() {
             fullWidth
           />
           {error ? <Alert severity="error">{error}</Alert> : null}
-          <Button type="submit" variant="contained" size="large" disabled={pending}>
+          <Button type="submit" variant="contained" size="large" disabled={pending} aria-keyshortcuts="Enter">
             {pending ? "Creating account…" : "Register"}
           </Button>
           <Divider>or</Divider>
@@ -126,6 +145,9 @@ export default function RegisterPage() {
           <Link component={RouterLink} to="/" variant="body2" textAlign="center">
             Back to chat
           </Link>
+          <Typography variant="caption" color="text.secondary" textAlign="center">
+            Enter register · Esc back to chat · Alt+L sign in
+          </Typography>
         </Stack>
       </Paper>
     </Box>

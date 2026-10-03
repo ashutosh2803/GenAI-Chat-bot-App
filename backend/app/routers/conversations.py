@@ -22,7 +22,12 @@ def title_from_text(text: str) -> str:
 
 
 def map_message(message: Message) -> dict:
-    return {"id": str(message.id), "role": message.role, "text": message.text}
+    return {
+        "id": str(message.id),
+        "role": message.role,
+        "text": message.text,
+        "createdAt": message.created_at.isoformat() if message.created_at else None,
+    }
 
 
 def map_conversation(conversation: Conversation, include_messages: bool) -> dict:
@@ -99,6 +104,18 @@ def append_message(
     db.commit()
     conversation = load_owned(db, user, conversation_id)
     return {"conversation": map_conversation(conversation, True), "reply": reply}
+
+
+@router.delete("/{conversation_id}")
+def delete_conversation(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    conversation = load_owned(db, user, conversation_id)
+    db.delete(conversation)
+    db.commit()
+    return {"ok": True}
 
 
 def load_owned(db: Session, user: User, conversation_id: str) -> Conversation:

@@ -80,3 +80,7 @@ export function startConversation(token, message) {
 export function appendConversationMessage(token, id, message) {
   return request(`/api/conversations/${id}/messages`, { method: "POST", token, body: { message } });
 }
+
+export function deleteConversation(token, id) {
+  return request(`/api/conversations/${id}`, { method: "DELETE", token });
+}

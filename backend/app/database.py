@@ -43,6 +43,13 @@ def init_db() -> bool:
         from app import models  # noqa: F401
 
         Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE conversations "
+                    "ADD COLUMN IF NOT EXISTS context_tokens INTEGER NOT NULL DEFAULT 0"
+                )
+            )
         SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
         db_ready = True
         db_error = ""

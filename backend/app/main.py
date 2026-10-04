@@ -1,4 +1,3 @@
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -7,6 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import database
+from app.groq import GroqError, generate_reply
 from app.routers import auth, conversations
 
 
@@ -46,9 +46,12 @@ def health():
 
 
 @app.post("/api/chat")
-async def chat(body: ChatBody):
+def chat(body: ChatBody):
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
-    await asyncio.sleep(0.6)
-    return {"reply": f"[mock] You said: {message}"}
+    try:
+        reply, usage = generate_reply([("user", message)])
+    except GroqError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    return {"reply": reply, "usage": usage}

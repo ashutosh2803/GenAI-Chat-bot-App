@@ -72,7 +72,7 @@ export default function LoginPage() {
     >
       <Paper sx={{ width: "100%", maxWidth: 420, p: 4 }} elevation={3}>
         <Stack spacing={2.5} component="form" onSubmit={handleSubmit}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <SmartToyIcon color="primary" />
             <Typography variant="h5">Sign in</Typography>
           </Stack>

@@ -3,7 +3,7 @@
 Chat UI: http://localhost:5173  
 API health: http://localhost:8000/health — expect `{"status":"ok","database":"connected"}`
 
-A working guest send returns a mock reply such as `[mock] You said: hello`.
+A working guest send returns a short reply from Groq.
 
 ## 1. Prerequisites
 
@@ -53,6 +53,10 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/genai_chat
 JWT_SECRET=dev-only-change-this-secret
 GOOGLE_CLIENT_ID=
 EMBEDDING_DIMENSIONS=1536
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MAX_OUTPUT_TOKENS=1024
+GROQ_CONTEXT_LIMIT=128000
 ```
 
 `frontend/.env` needs:

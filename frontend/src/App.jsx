@@ -15,15 +15,19 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  LinearProgress,
   Paper,
   Stack,
   TextField,
   Toolbar,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 import PersonIcon from "@mui/icons-material/Person";
 import SendIcon from "@mui/icons-material/Send";
+import ShareIcon from "@mui/icons-material/Share";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import {
   sendChatMessage,
@@ -74,8 +78,36 @@ function formatMessageTime(iso) {
 function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, typing = false }) {
   const isUser = role === "user";
   const isError = role === "error";
+  const isAssistant = role === "assistant";
   const timeLabel = typing ? "" : formatMessageTime(createdAt);
   const timeVisible = showTime && Boolean(timeLabel);
+  const [copied, setCopied] = useState(false);
+  const canShare = typeof navigator !== "undefined" && Boolean(navigator.share);
+  const showActions = isAssistant && !typing && Boolean(text);
+
+  async function handleCopy(event) {
+    event?.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard may be unavailable in some contexts.
+    }
+  }
+
+  async function handleShare(event) {
+    event.stopPropagation();
+    if (canShare) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    await handleCopy();
+  }
 
   return (
     <Box
@@ -129,7 +161,7 @@ function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, ty
               }}
             >
               {typing ? (
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                   <CircularProgress size={16} />
                   <Typography variant="body2">Assistant is typing…</Typography>
                 </Stack>
@@ -147,6 +179,26 @@ function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, ty
             </Avatar>
           ) : null}
         </Stack>
+
+        {showActions ? (
+          <Stack
+            direction="row"
+            spacing={0.25}
+            sx={{ pl: 6, mt: 0.25 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Tooltip title={copied ? "Copied!" : "Copy"}>
+              <IconButton size="small" aria-label="Copy reply" onClick={handleCopy}>
+                <ContentCopyIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={canShare ? "Share" : "Copy to share"}>
+              <IconButton size="small" aria-label="Share reply" onClick={handleShare}>
+                <ShareIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        ) : null}
 
         <Box
           sx={{
@@ -172,6 +224,36 @@ function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, ty
   );
 }
 
+function UsageBar({ usage }) {
+  const [open, setOpen] = useState(false);
+  if (!usage?.limit) return null;
+  const danger = usage.percent >= 80;
+  return (
+    <Box
+      onClick={() => setOpen((value) => !value)}
+      sx={{ px: 2, pt: 1, cursor: "pointer" }}
+    >
+      <LinearProgress
+        variant="determinate"
+        value={Math.min(usage.percent, 100)}
+        color={danger ? "error" : "primary"}
+        aria-label="Context usage"
+        sx={{ height: 4, borderRadius: 1 }}
+      />
+      {open ? (
+        <Typography
+          variant="caption"
+          color={danger ? "error.main" : "text.secondary"}
+          sx={{ display: "block", mt: 0.5 }}
+        >
+          {`${usage.used.toLocaleString()} / ${usage.limit.toLocaleString()} tokens (${usage.percent}%)`}
+          {danger ? " Be careful." : ""}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
 function App() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -183,6 +265,7 @@ function App() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMessageTimes, setShowMessageTimes] = useState(false);
+  const [usage, setUsage] = useState(null);
   const [guestUserCount, setGuestUserCount] = useState(readGuestCount);
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -194,6 +277,7 @@ function App() {
       setConversations([]);
       setActiveConversationId(null);
       setMessages([]);
+      setUsage(null);
       return;
     }
 
@@ -207,12 +291,14 @@ function App() {
         if (!list[0]) {
           setActiveConversationId(null);
           setMessages([]);
+          setUsage(null);
           return;
         }
         const { conversation } = await getConversation(user.token, list[0].id);
         if (cancelled) return;
         setActiveConversationId(conversation.id);
         setMessages(conversation.messages);
+        setUsage(conversation.usage || null);
       } catch (error) {
         if (error.status === 401) signOut();
       }
@@ -247,6 +333,7 @@ function App() {
   function startNewChat() {
     setActiveConversationId(null);
     setMessages([]);
+    setUsage(null);
     setInput("");
     inputRef.current?.focus();
   }
@@ -257,6 +344,7 @@ function App() {
       const { conversation: loaded } = await getConversation(user.token, conversationId);
       setActiveConversationId(loaded.id);
       setMessages(loaded.messages);
+      setUsage(loaded.usage || null);
     } catch (error) {
       if (error.status === 401) signOut();
     }
@@ -375,6 +463,7 @@ function App() {
           : await startConversation(user.token, text);
         setActiveConversationId(data.conversation.id);
         setMessages(data.conversation.messages);
+        setUsage(data.usage || data.conversation.usage || null);
         setConversations((prev) => [
           {
             id: data.conversation.id,
@@ -384,10 +473,11 @@ function App() {
           ...prev.filter((item) => item.id !== data.conversation.id),
         ]);
       } else {
-        const reply = await sendChatMessage(text);
+        const data = await sendChatMessage(text);
+        setUsage(data.usage || null);
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "assistant", text: reply, createdAt: new Date().toISOString() },
+          { id: crypto.randomUUID(), role: "assistant", text: data.reply, createdAt: new Date().toISOString() },
         ]);
       }
     } catch (error) {
@@ -414,12 +504,12 @@ function App() {
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">GenAI Chat-bot</Typography>
             <Typography variant="caption" sx={{ opacity: 0.85 }}>
-              Milestone 1 — mock replies
+              Groq
             </Typography>
           </Box>
-          <Chip label="Mock" color="secondary" size="small" />
+          <Chip label="Groq" color="secondary" size="small" />
           {user ? (
-            <Stack direction="row" spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Chip label={user.email} size="small" variant="outlined" sx={{ color: "inherit", borderColor: "rgba(255,255,255,0.5)" }} />
               <Button color="inherit" size="small" onClick={signOut}>
                 Log out
@@ -487,7 +577,7 @@ function App() {
                         py: 0.25,
                         pl: 1,
                         pr: 0.25,
-                        borderRadius: 1,
+                        borderRadius: "4px",
                       }}
                       onClick={() => openConversation(conversation.id)}
                     >
@@ -541,6 +631,7 @@ function App() {
             position: "relative",
           }}
         >
+          <UsageBar usage={usage} />
           <Box
             ref={listRef}
             sx={{
@@ -595,7 +686,7 @@ function App() {
                 <Typography color="text.secondary" sx={{ mb: 2 }}>
                   Guests can send {GUEST_MESSAGE_LIMIT} messages. Sign in or create an account to keep going.
                 </Typography>
-                <Stack direction="row" spacing={1} justifyContent="center">
+                <Stack direction="row" spacing={1} sx={{ justifyContent: "center" }}>
                   <Button component={RouterLink} to="/login" variant="contained">
                     Login
                   </Button>
@@ -612,7 +703,7 @@ function App() {
             onSubmit={handleSubmit}
             sx={{ p: 2, borderTop: 1, borderColor: "divider" }}
           >
-            <Stack direction="row" spacing={1} alignItems="flex-end">
+            <Stack direction="row" spacing={1} sx={{ alignItems: "flex-end" }}>
               <TextField
                 fullWidth
                 multiline

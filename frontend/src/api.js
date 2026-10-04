@@ -50,7 +50,7 @@ async function request(path, { method = "GET", body, token } = {}) {
 
 export async function sendChatMessage(message) {
   const data = await request("/api/chat", { method: "POST", body: { message } });
-  return data.reply;
+  return data;
 }
 
 export function registerAccount({ name, email, password }) {

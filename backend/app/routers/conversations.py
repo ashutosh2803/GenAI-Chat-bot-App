@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.deps import get_current_user, get_db
+from app.groq import GroqError, generate_reply, usage_from_tokens
 from app.models import Conversation, Message, User
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -35,6 +36,7 @@ def map_conversation(conversation: Conversation, include_messages: bool) -> dict
         "id": str(conversation.id),
         "title": conversation.title,
         "updatedAt": conversation.updated_at.isoformat() if conversation.updated_at else None,
+        "usage": usage_from_tokens(conversation.context_tokens or 0),
     }
     if include_messages:
         payload["messages"] = [map_message(message) for message in conversation.messages]
@@ -42,9 +44,12 @@ def map_conversation(conversation: Conversation, include_messages: bool) -> dict
 
 
 def add_exchange(conversation: Conversation, message: str) -> str:
-    reply = f"[mock] You said: {message}"
+    history = [(item.role, item.text) for item in conversation.messages]
+    history.append(("user", message))
+    reply, usage = generate_reply(history)
     conversation.messages.append(Message(role="user", text=message))
     conversation.messages.append(Message(role="assistant", text=reply))
+    conversation.context_tokens = usage["used"]
     if conversation.title == "New chat":
         conversation.title = title_from_text(message)
     conversation.updated_at = datetime.now(timezone.utc)
@@ -80,12 +85,16 @@ def start_conversation(
         raise HTTPException(status_code=400, detail="message is required")
 
     conversation = Conversation(user_id=user.id, title=title_from_text(message))
-    reply = add_exchange(conversation, message)
+    try:
+        reply = add_exchange(conversation, message)
+    except GroqError as error:
+        raise HTTPException(status_code=503, detail=str(error))
     conversation.title = title_from_text(message)
     db.add(conversation)
     db.commit()
     conversation = load_owned(db, user, str(conversation.id))
-    return {"conversation": map_conversation(conversation, True), "reply": reply}
+    payload = map_conversation(conversation, True)
+    return {"conversation": payload, "reply": reply, "usage": payload["usage"]}
 
 
 @router.post("/{conversation_id}/messages")
@@ -100,10 +109,14 @@ def append_message(
         raise HTTPException(status_code=400, detail="message is required")
 
     conversation = load_owned(db, user, conversation_id)
-    reply = add_exchange(conversation, message)
+    try:
+        reply = add_exchange(conversation, message)
+    except GroqError as error:
+        raise HTTPException(status_code=503, detail=str(error))
     db.commit()
     conversation = load_owned(db, user, conversation_id)
-    return {"conversation": map_conversation(conversation, True), "reply": reply}
+    payload = map_conversation(conversation, True)
+    return {"conversation": payload, "reply": reply, "usage": payload["usage"]}
 
 
 @router.delete("/{conversation_id}")

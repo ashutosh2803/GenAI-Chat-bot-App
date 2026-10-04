@@ -1,8 +1,8 @@
 # GenAI Chat-bot App
 
-A chat page with login and register. Guests can send 3 messages. After that, sign in with email and password or Google to keep chatting. Replies are still mock replies from the backend. Accounts and signed-in chats are stored in PostgreSQL. The UI uses **Material UI**.
+A chat page with login and register. Guests can send 3 messages. After that, sign in with email and password or Google to keep chatting. Replies come from Groq. Accounts and signed-in chats are stored in PostgreSQL. The UI uses **Material UI**.
 
-![Chat page with a mock reply](docs/screenshot.png)
+![Chat page](docs/screenshot.png)
 
 ## Prerequisites
 
@@ -102,9 +102,7 @@ Restart the frontend after you change `frontend/.env`.
 
 ## How to try it
 
-Type a message and press **Send** (or Enter). After a short pause you should get a reply like:
-
-`[mock] You said: hello`
+Type a message and press **Send** (or Enter). After a short pause you should get a reply from Groq.
 
 A guest can send 3 messages. The next send is blocked until you use **Login** or **Register**.
 
@@ -116,6 +114,6 @@ If the backend is not running, the page shows an error bubble instead.
 
 ## Roadmap (not built yet)
 
-- Real LLM (OpenAI, Gemini, or similar)
+- Groq API key for chat replies
 - Writing and searching message embeddings
 - Streaming replies

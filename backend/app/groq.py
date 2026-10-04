@@ -75,6 +75,21 @@ def generate_reply(turns: list[tuple[str, str]]) -> tuple[str, dict]:
     if not turns:
         raise GroqError("Message is required")
 
+    api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+
+    if not api_key:
+        last_user = ""
+        for role, text in reversed(turns):
+            if role == "user":
+                last_user = (text or "").strip()
+                break
+        if not last_user:
+            last_user = "hello"
+
+        reply = f"[mock] You said: {last_user}"
+        usage = usage_from_tokens(max(len(reply), 32))
+        return reply, usage
+
     limit = input_token_limit()
     kept = _trim(_for_model(turns), limit)
     response = None

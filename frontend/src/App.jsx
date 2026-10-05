@@ -46,6 +46,9 @@ import {
   isRecallShortcut,
   isSendShortcut,
 } from "./keyboard";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import { useTheme } from "./theme/ThemeContext.jsx";
 
 const GUEST_MESSAGE_LIMIT = 3;
 const GUEST_COUNT_KEY = "genai-guest-user-messages";
@@ -156,7 +159,7 @@ function MessageRow({ role, text, createdAt, showTime = false, onRevealTimes, ty
                 py: 1.25,
                 maxWidth: "100%",
                 cursor: typing ? "default" : "pointer",
-                bgcolor: isUser ? "primary.main" : "grey.100",
+                bgcolor: isUser ? "primary.main" : "background.paper",
                 color: isUser ? "primary.contrastText" : "text.primary",
               }}
             >
@@ -251,6 +254,28 @@ function UsageBar({ usage }) {
         </Typography>
       ) : null}
     </Box>
+  );
+}
+
+function ThemeToggle() {
+  const { isDarkMode, toggleTheme } = useTheme();
+
+  return (
+    <Tooltip title={isDarkMode ? "Light mode" : "Dark mode"}>
+      <IconButton
+        onClick={toggleTheme}
+        color="inherit"
+        aria-label="Toggle theme"
+        sx={{
+          transition: "transform 0.2s ease",
+          "&:hover": {
+            transform: "rotate(20deg)",
+          },
+        }}
+      >
+        {isDarkMode ? <LightModeIcon /> : <DarkModeIcon />}
+      </IconButton>
+    </Tooltip>
   );
 }
 
@@ -508,6 +533,9 @@ function App() {
             </Typography>
           </Box>
           <Chip label="Groq" color="secondary" size="small" />
+
+          <ThemeToggle />
+
           {user ? (
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Chip label={user.email} size="small" variant="outlined" sx={{ color: "inherit", borderColor: "rgba(255,255,255,0.5)" }} />

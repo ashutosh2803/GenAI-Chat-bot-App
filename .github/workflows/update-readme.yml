@@ -1,7 +1,7 @@
-# After a pull request is merged into main, refresh readme.md from that
+# After a pull request is merged into master, refresh readme.md from that
 # change and replace docs/screenshot.png with a new chat screenshot.
 #
-# Direct pushes to main are ignored. The commit this workflow pushes uses
+# Direct pushes to master are ignored. The commit this workflow pushes uses
 # the default GITHUB_TOKEN, which does not start another run.
 #
 # Required repository secret:
@@ -10,7 +10,7 @@
 #   README_AI_BASE_URL  default https://api.openai.com/v1
 #   README_AI_MODEL     default gpt-4.1-mini
 #
-# main must allow this token to push. If main requires a pull request, add
+# master must allow this token to push. If master requires a pull request, add
 # a bypass for GitHub Actions or this commit step will fail.
 
 name: Update README and screenshot
@@ -18,7 +18,7 @@ name: Update README and screenshot
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: master
 
       - name: Find the merged pull request
         id: pr
@@ -52,7 +52,7 @@ jobs:
                 owner,
                 repo,
                 state: 'closed',
-                base: 'main',
+                base: 'master',
                 sort: 'updated',
                 direction: 'desc',
                 per_page: 20,
@@ -64,7 +64,7 @@ jobs:
                 repo,
                 commit_sha: context.sha,
               });
-              pr = data.find((item) => item.merged_at && item.base.ref === 'main');
+              pr = data.find((item) => item.merged_at && item.base.ref === 'master');
             }
 
             if (!pr) {
@@ -174,4 +174,4 @@ jobs:
             exit 0
           fi
           git commit -m "Update README and screenshot after merged changes"
-          git push origin HEAD:main
+          git push origin HEAD:master
